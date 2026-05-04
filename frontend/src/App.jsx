@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Toaster } from "react-hot-toast";
 import VideoInput from "./components/VideoInput";
 import ContentDashboard from "./components/ContentDashboard";
+import VideoHistory from "./components/VideoHistory";
 import { useContentGenerator } from "./hooks/useContentGenerator";
 import "./styles/App.css";
 
@@ -16,9 +17,11 @@ function App() {
     analyzing,
     generatingTypes,
     error,
+    history,
     analyze,
     generateAll,
     generateSingle,
+    generateAllSequentially,
     reset,
   } = useContentGenerator();
 
@@ -29,8 +32,28 @@ function App() {
 
   const handleGenerate = async (videoUrl, selectedTypes) => {
     setUrl(videoUrl);
-    await generateAll(videoUrl);
     setStep("dashboard");
+    
+    if (!videoData || videoData.video.id !== videoUrl) {
+      await analyze(videoUrl);
+    }
+
+    await generateAllSequentially(videoUrl, selectedTypes);
+  };
+
+  const handleSelectHistory = async (videoUrl) => {
+    setUrl(videoUrl);
+    const data = await analyze(videoUrl);
+    if (data) {
+      setStep("dashboard");
+      // Since it's history, we might want to load existing content
+      // The backend already handles caching, so calling generateAllSequentially
+      // will be nearly instant.
+      await generateAllSequentially(videoUrl, [
+        "summary", "tweet", "thread", "article", 
+        "carousel", "infographic", "linkedinPost", "newsletter"
+      ]);
+    }
   };
 
   const handleGenerateSingle = async (contentType) => {
@@ -58,9 +81,12 @@ function App() {
       />
 
       {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-lg">
+      <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-lg sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div 
+            className="flex items-center gap-3 cursor-pointer"
+            onClick={handleReset}
+          >
             <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
               <span className="text-xl">🎬</span>
             </div>
@@ -75,7 +101,7 @@ function App() {
           {step === "dashboard" && (
             <button
               onClick={handleReset}
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-sm transition-colors"
+              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-sm transition-colors border border-gray-700"
             >
               ← New Video
             </button>
@@ -86,14 +112,20 @@ function App() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
         {step === "input" && (
-          <VideoInput
-            onAnalyze={handleAnalyze}
-            onGenerate={handleGenerate}
-            videoData={videoData}
-            analyzing={analyzing}
-            loading={loading}
-            error={error}
-          />
+          <>
+            <VideoInput
+              onAnalyze={handleAnalyze}
+              onGenerate={handleGenerate}
+              videoData={videoData}
+              analyzing={analyzing}
+              loading={loading}
+              error={error}
+            />
+            <VideoHistory 
+              history={history} 
+              onSelect={handleSelectHistory} 
+            />
+          </>
         )}
 
         {step === "dashboard" && (
@@ -109,9 +141,10 @@ function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-gray-800 mt-16">
-        <div className="max-w-7xl mx-auto px-4 py-6 text-center text-gray-500 text-sm">
-          ContentForge — Transform any YouTube video into multi-platform content
+      <footer className="border-t border-gray-800 mt-16 bg-gray-900/30">
+        <div className="max-w-7xl mx-auto px-4 py-8 text-center text-gray-500 text-sm">
+          <p>© 2024 ContentForge — Local AI-Powered Content Repurposing</p>
+          <p className="mt-2 text-xs opacity-50">Privacy first. All processing happens on your machine.</p>
         </div>
       </footer>
     </div>

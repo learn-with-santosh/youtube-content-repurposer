@@ -2,6 +2,7 @@ const YouTubeService = require("../services/youtubeService");
 const TranscriptService = require("../services/transcriptService");
 const AIService = require("../services/aiService");
 const ImageService = require("../services/imageService");
+const DBService = require("../services/dbService");
 const config = require("../config/config");
 
 class ContentController {
@@ -18,6 +19,32 @@ class ContentController {
       }
 
       const videoId = YouTubeService.extractVideoId(url);
+      
+      // Check cache
+      const cachedVideo = DBService.getVideo(videoId);
+      if (cachedVideo) {
+        return res.json({
+          success: true,
+          data: {
+            video: {
+              id: cachedVideo.id,
+              title: cachedVideo.title,
+              description: cachedVideo.description,
+              channelTitle: cachedVideo.channel_title,
+              thumbnail: cachedVideo.thumbnail_url,
+              formattedDuration: YouTubeService.formatDuration(cachedVideo.duration),
+              viewCount: cachedVideo.view_count,
+            },
+            transcript: {
+              wordCount: cachedVideo.transcript.wordCount,
+              segmentCount: cachedVideo.transcript.segments.length,
+              preview: cachedVideo.transcript.fullText.substring(0, 500) + "...",
+            },
+            cached: true
+          },
+        });
+      }
+
       const videoData = await YouTubeService.getVideoDetails(videoId);
 
       // Check video duration
@@ -67,49 +94,46 @@ class ContentController {
         return res.status(400).json({ error: "YouTube URL is required" });
       }
 
-      // Step 1: Extract video info
+      // Step 1: Check cache first
       const videoId = YouTubeService.extractVideoId(url);
-      const videoData = await YouTubeService.getVideoDetails(videoId);
+      const cachedVideo = DBService.getVideo(videoId);
+      const cachedContent = DBService.getAllContent(videoId);
 
-      // Step 2: Get transcript
-      const transcript = await TranscriptService.getTranscript(videoId);
+      let videoData = cachedVideo;
+      let transcript = cachedVideo?.transcript;
+
+      if (!videoData) {
+        videoData = await YouTubeService.getVideoDetails(videoId);
+        transcript = await TranscriptService.getTranscript(videoId);
+        DBService.saveVideo(videoData, transcript);
+      }
 
       // Step 3: Generate requested content
-      let results = {};
+      let results = contentTypes.includes("all") ? cachedContent : {};
       let errors = {};
 
-      if (contentTypes.includes("all")) {
-        const allContent = await AIService.generateAll(videoData, transcript);
-        results = allContent.results;
-        errors = allContent.errors;
-      } else {
-        const generatorMap = {
-          tweet: () => AIService.generateTweet(videoData, transcript),
-          thread: () => AIService.generateThread(videoData, transcript),
-          article: () => AIService.generateArticle(videoData, transcript),
-          infographic: () =>
-            AIService.generateInfographic(videoData, transcript),
-          carousel: () => AIService.generateCarousel(videoData, transcript),
-          linkedin_post: () =>
-            AIService.generateLinkedInPost(videoData, transcript),
-          newsletter: () => AIService.generateNewsletter(videoData, transcript),
-          summary: () => AIService.generateSummary(videoData, transcript),
-        };
+      const pendingTypes = contentTypes.includes("all") 
+        ? Object.keys(AIService.getGenerators()).filter(type => !cachedContent[type])
+        : contentTypes.filter(type => !cachedContent[type]);
 
-        // Process selected types one by one
-        for (const type of contentTypes) {
+      if (pendingTypes.length > 0) {
+        const generatorMap = AIService.getGenerators(videoData, transcript);
+
+        // Process missing types sequentially
+        for (const type of pendingTypes) {
           const generator = generatorMap[type];
           if (generator) {
             try {
-              results[type] = await generator();
+              const generated = await generator();
+              results[type] = generated;
+              DBService.saveContent(videoId, type, generated);
             } catch (error) {
               errors[type] = error.message;
             }
-          } else {
-            errors[type] = `Unknown content type: ${type}`;
           }
         }
-
+      } else {
+        results = cachedContent;
       }
 
       // Step 4: Generate images if applicable
@@ -136,10 +160,10 @@ class ContentController {
         success: true,
         data: {
           video: {
-            id: videoData.id,
+            id: videoData.id || videoData.youtube_id,
             title: videoData.title,
-            channelTitle: videoData.channelTitle,
-            thumbnail: videoData.thumbnails?.high?.url,
+            channelTitle: videoData.channelTitle || videoData.channel_title,
+            thumbnail: videoData.thumbnails?.high?.url || videoData.thumbnail_url,
             formattedDuration: YouTubeService.formatDuration(
               videoData.duration,
             ),
@@ -169,22 +193,43 @@ class ContentController {
       }
 
       const videoId = YouTubeService.extractVideoId(url);
-      const videoData = await YouTubeService.getVideoDetails(videoId);
-      const transcript = await TranscriptService.getTranscript(videoId);
 
-      const generatorMap = {
-        tweet: () => AIService.generateTweet(videoData, transcript),
-        thread: () => AIService.generateThread(videoData, transcript),
-        article: () => AIService.generateArticle(videoData, transcript),
-        infographic: () => AIService.generateInfographic(videoData, transcript),
-        carousel: () => AIService.generateCarousel(videoData, transcript),
-        linkedin_post: () =>
-          AIService.generateLinkedInPost(videoData, transcript),
-        newsletter: () => AIService.generateNewsletter(videoData, transcript),
-        summary: () => AIService.generateSummary(videoData, transcript),
-      };
+      // Check cache for this specific content
+      const cachedContent = DBService.getContent(videoId, contentType);
+      if (cachedContent) {
+        // Still need images if carousel/infographic
+        let images = null;
+        if (contentType === "carousel") {
+          images = await ImageService.generateCarouselImages(cachedContent);
+        } else if (contentType === "infographic") {
+          images = await ImageService.generateInfographicImage(cachedContent);
+        }
 
+        return res.json({
+          success: true,
+          data: {
+            contentType,
+            content: cachedContent,
+            images,
+            generatedAt: new Date().toISOString(),
+            cached: true
+          },
+        });
+      }
+
+      const cachedVideo = DBService.getVideo(videoId);
+      let videoData = cachedVideo;
+      let transcript = cachedVideo?.transcript;
+
+      if (!videoData) {
+        videoData = await YouTubeService.getVideoDetails(videoId);
+        transcript = await TranscriptService.getTranscript(videoId);
+        DBService.saveVideo(videoData, transcript);
+      }
+
+      const generatorMap = AIService.getGenerators(videoData, transcript);
       const generator = generatorMap[contentType];
+
       if (!generator) {
         return res
           .status(400)
@@ -192,6 +237,7 @@ class ContentController {
       }
 
       const content = await generator();
+      DBService.saveContent(videoId, contentType, content);
 
       // Generate images if applicable
       let images = null;
@@ -209,6 +255,31 @@ class ContentController {
           images,
           generatedAt: new Date().toISOString(),
         },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/content/history
+   * Fetch all previously processed videos
+   */
+  static async getHistory(req, res, next) {
+    try {
+      const history = DBService.getHistory();
+      res.json({
+        success: true,
+        data: history.map((video) => ({
+          id: video.id,
+          url: video.url,
+          title: video.title,
+          channelTitle: video.channel_title,
+          thumbnail: video.thumbnail_url,
+          duration: video.duration,
+          formattedDuration: YouTubeService.formatDuration(video.duration),
+          createdAt: video.created_at,
+        })),
       });
     } catch (error) {
       next(error);

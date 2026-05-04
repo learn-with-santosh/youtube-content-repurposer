@@ -11,4 +11,9 @@ router.post("/generate", ContentController.generateContent);
 // Generate single content type
 router.post("/generate/single", ContentController.generateSingleContent);
 
+// Get video processing history
+router.get("/history", ContentController.getHistory);
+
+
 module.exports = router;
+

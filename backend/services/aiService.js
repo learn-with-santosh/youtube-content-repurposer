@@ -358,10 +358,10 @@ Return ONLY valid JSON, no markdown.`;
   }
 
   /**
-   * Generate all content types sequentially to avoid overloading local Ollama
+   * Returns a map of available content generators
    */
-  static async generateAll(videoData, transcript) {
-    const generators = {
+  static getGenerators(videoData, transcript) {
+    return {
       tweet: () => this.generateTweet(videoData, transcript),
       thread: () => this.generateThread(videoData, transcript),
       article: () => this.generateArticle(videoData, transcript),
@@ -371,6 +371,14 @@ Return ONLY valid JSON, no markdown.`;
       newsletter: () => this.generateNewsletter(videoData, transcript),
       summary: () => this.generateSummary(videoData, transcript),
     };
+  }
+
+  /**
+   * Generate all content types sequentially to avoid overloading local Ollama
+   */
+  static async generateAll(videoData, transcript) {
+    const generators = this.getGenerators(videoData, transcript);
+
 
     const results = {};
     const errors = {};

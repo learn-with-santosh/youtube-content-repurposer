@@ -41,4 +41,10 @@ export const generateSelectedContent = async (url, contentTypes) => {
   return response.data;
 };
 
+export const fetchHistory = async () => {
+  const response = await api.get("/content/history");
+  return response.data;
+};
+
 export default api;
+

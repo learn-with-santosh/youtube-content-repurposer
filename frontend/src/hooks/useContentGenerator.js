@@ -1,8 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   analyzeVideo,
   generateAllContent,
   generateSingleContent,
+  fetchHistory,
 } from "../services/api";
 import toast from "react-hot-toast";
 
@@ -13,6 +14,20 @@ export const useContentGenerator = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [generatingTypes, setGeneratingTypes] = useState(new Set());
   const [error, setError] = useState(null);
+  const [history, setHistory] = useState([]);
+
+  const loadHistory = useCallback(async () => {
+    try {
+      const result = await fetchHistory();
+      setHistory(result.data);
+    } catch (err) {
+      console.error("Failed to load history:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
 
   const analyze = useCallback(async (url) => {
     setAnalyzing(true);
@@ -20,6 +35,8 @@ export const useContentGenerator = () => {
     try {
       const result = await analyzeVideo(url);
       setVideoData(result.data);
+      // Refresh history in background
+      loadHistory();
       toast.success("Video analyzed successfully!");
       return result.data;
     } catch (err) {
@@ -30,7 +47,7 @@ export const useContentGenerator = () => {
     } finally {
       setAnalyzing(false);
     }
-  }, []);
+  }, [loadHistory]);
 
   const generateAll = useCallback(async (url) => {
     setLoading(true);
@@ -39,6 +56,7 @@ export const useContentGenerator = () => {
       const result = await generateAllContent(url);
       setVideoData((prev) => ({ ...prev, video: result.data.video }));
       setContent(result.data.content);
+      loadHistory();
 
       if (result.data.errors) {
         Object.entries(result.data.errors).forEach(([type, msg]) => {
@@ -56,7 +74,7 @@ export const useContentGenerator = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadHistory]);
 
   const generateSingle = useCallback(async (url, contentType) => {
     setGeneratingTypes((prev) => new Set([...prev, contentType]));
@@ -69,6 +87,7 @@ export const useContentGenerator = () => {
           [`${contentType}Images`]: result.data.images,
         }),
       }));
+      loadHistory();
       toast.success(`${contentType} generated!`);
       return result.data;
     } catch (err) {
@@ -82,7 +101,19 @@ export const useContentGenerator = () => {
         return next;
       });
     }
-  }, []);
+  }, [loadHistory]);
+
+  const generateAllSequentially = useCallback(async (url, types) => {
+    setLoading(true);
+    for (const type of types) {
+      try {
+        await generateSingle(url, type);
+      } catch (err) {
+        // Error is already handled inside generateSingle toast
+      }
+    }
+    setLoading(false);
+  }, [generateSingle]);
 
   const reset = useCallback(() => {
     setVideoData(null);
@@ -90,7 +121,8 @@ export const useContentGenerator = () => {
     setError(null);
     setLoading(false);
     setGeneratingTypes(new Set());
-  }, []);
+    loadHistory();
+  }, [loadHistory]);
 
   return {
     videoData,
@@ -99,9 +131,12 @@ export const useContentGenerator = () => {
     analyzing,
     generatingTypes,
     error,
+    history,
     analyze,
     generateAll,
     generateSingle,
+    generateAllSequentially,
     reset,
+    loadHistory,
   };
 };
