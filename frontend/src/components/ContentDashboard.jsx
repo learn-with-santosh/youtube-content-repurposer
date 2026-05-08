@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { RefreshCw } from "lucide-react";
 import TweetCard from "./TweetCard";
 import ThreadCard from "./ThreadCard";
 import ArticleCard from "./ArticleCard";
@@ -45,31 +46,31 @@ const ContentDashboard = ({
       );
     }
 
-    switch (activeTab) {
-      case "summary":
-        return <SummaryView data={data} />;
-      case "tweet":
-        return <TweetCard tweets={data} />;
-      case "thread":
-        return <ThreadCard thread={data} />;
-      case "article":
-        return <ArticleCard article={data} />;
-      case "carousel":
-        return <CarouselCard carousel={data} images={content.carouselImages} />;
-      case "infographic":
-        return (
-          <InfographicCard
-            infographic={data}
-            image={content.infographicImage}
-          />
-        );
-      case "linkedinPost":
-        return <LinkedInPostCard posts={data} />;
-      case "newsletter":
-        return <NewsletterCard newsletter={data} />;
-      default:
-        return <div className="text-gray-400">Select a content type</div>;
-    }
+    return (
+      <div className="relative">
+        {/* Re-generate Button */}
+        <div className="absolute top-0 right-0 z-10">
+          <button
+            onClick={() => onGenerateSingle(activeTab, true)}
+            disabled={generatingTypes.has(activeTab)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-purple-400 rounded-lg border border-gray-700 transition-all text-xs font-medium group"
+            title="Re-generate this content"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${generatingTypes.has(activeTab) ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
+            <span>Re-generate</span>
+          </button>
+        </div>
+
+        {activeTab === "summary" && <SummaryView data={data} />}
+        {activeTab === "tweet" && <TweetCard tweets={data} />}
+        {activeTab === "thread" && <ThreadCard thread={data} />}
+        {activeTab === "article" && <ArticleCard article={data} />}
+        {activeTab === "carousel" && <CarouselCard carousel={data} images={content.carouselImages} />}
+        {activeTab === "infographic" && <InfographicCard infographic={data} image={content.infographicImage} />}
+        {activeTab === "linkedinPost" && <LinkedInPostCard posts={data} />}
+        {activeTab === "newsletter" && <NewsletterCard newsletter={data} />}
+      </div>
+    );
   };
 
   return (

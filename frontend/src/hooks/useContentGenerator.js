@@ -76,10 +76,10 @@ export const useContentGenerator = () => {
     }
   }, [loadHistory]);
 
-  const generateSingle = useCallback(async (url, contentType) => {
+  const generateSingle = useCallback(async (url, contentType, force = false) => {
     setGeneratingTypes((prev) => new Set([...prev, contentType]));
     try {
-      const result = await generateSingleContent(url, contentType);
+      const result = await generateSingleContent(url, contentType, force);
       setContent((prev) => ({
         ...prev,
         [contentType]: result.data.content,
@@ -88,7 +88,7 @@ export const useContentGenerator = () => {
         }),
       }));
       loadHistory();
-      toast.success(`${contentType} generated!`);
+      toast.success(`${contentType} ${force ? 're-generated' : 'generated'}!`);
       return result.data;
     } catch (err) {
       const message = err.response?.data?.error || err.message;
@@ -102,6 +102,7 @@ export const useContentGenerator = () => {
       });
     }
   }, [loadHistory]);
+
 
   const generateAllSequentially = useCallback(async (url, types) => {
     setLoading(true);

@@ -88,16 +88,16 @@ class ContentController {
    */
   static async generateContent(req, res, next) {
     try {
-      const { url, contentTypes = ["all"] } = req.body;
+      const { url, contentTypes = ["all"], force = false } = req.body;
 
       if (!url) {
         return res.status(400).json({ error: "YouTube URL is required" });
       }
 
-      // Step 1: Check cache first
+      // Step 1: Check cache first (unless forced)
       const videoId = YouTubeService.extractVideoId(url);
       const cachedVideo = DBService.getVideo(videoId);
-      const cachedContent = DBService.getAllContent(videoId);
+      const cachedContent = force ? {} : DBService.getAllContent(videoId);
 
       let videoData = cachedVideo;
       let transcript = cachedVideo?.transcript;
@@ -109,12 +109,12 @@ class ContentController {
       }
 
       // Step 3: Generate requested content
-      let results = contentTypes.includes("all") ? cachedContent : {};
+      let results = (contentTypes.includes("all") && !force) ? cachedContent : {};
       let errors = {};
 
       const pendingTypes = contentTypes.includes("all") 
-        ? Object.keys(AIService.getGenerators()).filter(type => !cachedContent[type])
-        : contentTypes.filter(type => !cachedContent[type]);
+        ? Object.keys(AIService.getGenerators()).filter(type => force || !cachedContent[type])
+        : contentTypes.filter(type => force || !cachedContent[type]);
 
       if (pendingTypes.length > 0) {
         const generatorMap = AIService.getGenerators(videoData, transcript);
@@ -184,7 +184,7 @@ class ContentController {
    */
   static async generateSingleContent(req, res, next) {
     try {
-      const { url, contentType } = req.body;
+      const { url, contentType, force = false } = req.body;
 
       if (!url || !contentType) {
         return res.status(400).json({
@@ -194,8 +194,8 @@ class ContentController {
 
       const videoId = YouTubeService.extractVideoId(url);
 
-      // Check cache for this specific content
-      const cachedContent = DBService.getContent(videoId, contentType);
+      // Check cache for this specific content (unless forced)
+      const cachedContent = force ? null : DBService.getContent(videoId, contentType);
       if (cachedContent) {
         // Still need images if carousel/infographic
         let images = null;

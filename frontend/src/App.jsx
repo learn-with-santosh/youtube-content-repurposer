@@ -56,9 +56,10 @@ function App() {
     }
   };
 
-  const handleGenerateSingle = async (contentType) => {
-    await generateSingle(url, contentType);
+  const handleGenerateSingle = async (contentType, force = false) => {
+    await generateSingle(url, contentType, force);
   };
+
 
   const handleReset = () => {
     reset();
